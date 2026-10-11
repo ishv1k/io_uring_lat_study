@@ -272,8 +272,8 @@ Prerequisites: §1 clones configured, §2 build deps installed, §4 kernel-sourc
 K="CC=gcc-11 HOSTCC=gcc-11"   # nexus03's default gcc is 10.5; the paper used 11.4.0
 for t in default latency; do
   cd ~/linux-latency-5.10-$t
-  make $K -j"$(nproc)" bzImage && make $K -j"$(nproc)" modules || break
-  sudo make $K INSTALL_MOD_STRIP=1 modules_install && sudo make $K install
+  make -j"$(nproc)" bzImage && make -j"$(nproc)" modules || break
+  sudo make modules_install && sudo make install
 done
 ```
 
