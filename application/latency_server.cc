@@ -503,7 +503,7 @@ void tcp_connection(int fd, struct sockaddr_in source)
  */
 void tcp_server(int port, int num_threads, int iodepth, int flow_size, int pin, int permute, int sc)
 {
-	int cpu_list[32] = {1, 73, 3, 75, 5, 77, 7, 79, 9, 81, 11, 83, 13, 85, 15, 87, 17, 89, 19, 91, 21, 93, 23, 95, 25, 97, 27, 99, 29, 101, 31, 103};
+	int cpu_list[32] = {65, 193, 66, 194, 67, 195, 68, 196, 69, 197, 70, 198, 71, 199, 72, 200, 73, 201, 74, 202, 75, 203, 76, 204, 77, 205, 78, 206, 79, 207, 80, 208};
 	// int cpu_list[16] = {0, 32, 4, 36, 8, 40, 12, 44, 16, 48, 20, 52, 24, 56, 28, 60};
 	// int cpu_list[2] = {0, 32};
 	//int cpu_list[8] = {0, 4, 8, 12, 16, 20, 24, 28};

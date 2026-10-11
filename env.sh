@@ -1,21 +1,27 @@
 #!/bin/bash
 
+# Testbed: nexus03 (client) <-> nexus01 (server), direct CX-7 link.
+# See replication/nexus03_client.md and replication/nexus01_server.md.
+
 # Set to client-side IP address
-HOST=192.168.1.101
+HOST=192.168.101.3
 
 # Set to server-side IP address
-TARGET=192.168.1.102
+TARGET=192.168.101.111
 
-# Set to the network interface name (eg. ens1np0).
-# We assume both side use the same interface name. 
-# Please change other scripts accordingly if they are different.
-INTF=enp202s0f0np0
+# Local network interface. The two machines use different names, so commands run on
+# the server (inside ssh) use TARGET_INTF instead.
+case $(hostname -s) in nexus01) INTF=ens1np0 ;; *) INTF=ens1006np0 ;; esac
+TARGET_INTF=ens1np0
 
-# Set to the hostname of the remote server (e.g., syslab.cs.virginia.edu)
-TARGETC=clnode264.clemson.cloudlab.us
+# Hostname of the remote server: management network, NOT the 192.168.101.x test link
+TARGETC=nexus01.csl.illinois.edu
 
-# Username of the remote server (e.g., netian)
-USER=netian
+# Username of the remote server
+USER=iksingh2
 
-# Set to the directory of the project on the remote server (e.g., /home/ame)
-TARGETDIR=/users/netian
+# Home directory on the remote server
+TARGETDIR=/home/iksingh2
+
+# This repo on the remote server (replaces "$TARGETDIR/latency" in the scripts)
+TARGET_REPO=/home/iksingh2/io_uring_lat_study

@@ -123,7 +123,7 @@ index ad5f30c..ecad273 100644
 +		/* Dumb scheduling based on packet */
 +		if (sysctl_net_latency_dumb_schedule_tcp_send &&
 +			sk->sk_protocol == IPPROTO_TCP &&
-+			inet_sk(sk)->inet_saddr == in_aton("192.168.1.101")) {
++			inet_sk(sk)->inet_saddr == in_aton("192.168.101.3")) {
 +			current->se.vruntime = (u64)(tcp_sk(sk)->data_segs_out) * 1000000;
 +			// current->se.vruntime += 1000000;
 +		}

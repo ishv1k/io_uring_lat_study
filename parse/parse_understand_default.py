@@ -4,7 +4,7 @@ import numpy as np
 
 # The client threads of the single-core experiment are pinned to this core
 # (see TASKSET in scripts/single_core_understand_default.sh).
-CLIENT_CORE = 73
+CLIENT_CORE = 65
 
 # netperf binds one port per thread, starting from this base port
 BASE_PORT = 10000
@@ -258,7 +258,7 @@ def report(threads_info):
 
 
 if __name__ == "__main__":
-    result_dir = "/data/projects/latency/"
+    result_dir = "/home/iksingh2/io_uring_lat_study/results/"
     experiment = "single_core_understand_default/36_64_1_1_1_1_1_0"
     n_thread = 36
 

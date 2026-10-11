@@ -9,7 +9,7 @@ This file is for **nexus01**, the **server / "target"** side. The client side is
 > - **Booting and boot settings are yours.** Claude builds and installs the 5.10.46 kernels (§5) but never reboots, runs `grub-reboot`, or edits GRUB. The 5.10.46 boot entries must have the **IOMMU off**. nexus01's global `GRUB_CMDLINE_LINUX` has `intel_iommu=on,sm_on … iommu.strict=1`, which those entries would otherwise inherit.
 > - **In-tree NIC driver.** Installing a kernel can trigger OFED's DKMS auto-build (DOCA-OFED 25.07 is installed), which installs OFED's own `mlx5_core` for 5.10.46. The experiments need the in-tree driver. §5 and §6 check this, but removing an OFED build is your call.
 > - **After every kernel switch,** `application/` and `modules/` must be rebuilt against the running kernel (§6.1 does this), and the runtime settings re-applied (`testbed_mode.sh apply`, §3).
-> - **Same repo branch on both machines.** nexus03 makes the experiment-script edits (§4 of its file); pull them here.
+> - **Same repo branch on both machines:** `io_uring_study`. nexus03 makes the experiment-script edits (§4 of its file); pull them here.
 > - **Quiet testbed** (probably nothing to do): no NVMe-over-RDMA traffic on the `192.168.101.x` link and no other jobs on CPUs 64–95/192–223 during experiments. §6 checks it.
 > - **Matching settings.** CPU frequency governor and turbo must be the same on both machines. §6 records them, and nexus03's Claude compares the two. Change them yourself if they differ.
 
@@ -25,11 +25,11 @@ This file is for **nexus01**, the **server / "target"** side. The client side is
 | | nexus03 (client / "host") | nexus01 (server / "target", **this machine**) |
 |---|---|---|
 | CPU | 2× Xeon Gold 6538Y+, 32 cores/socket, 2 NUMA nodes, **HT currently off** | 2× Xeon Platinum 8592V, 64 cores/socket, SNC → 4 NUMA nodes, HT on |
-| CX-7 interface | `ens5008np0`, PCI `bf:00.0`, NUMA 1 | **`ens1np0`**, PCI `98:00.0`, NUMA 2 |
+| CX-7 interface | `ens1006np0`, PCI `22:00.0`, NUMA 0 | **`ens1np0`**, PCI `98:00.0`, NUMA 2 |
 | CX-7 IP | `192.168.101.3` | **`192.168.101.111/24`** (netplan `cx7-static.yaml`, MTU 4000) |
 | Link | direct, back-to-back | |
-| Single-core CPUs (both hyperthreads of one core) | `33,97` | **`65,193`** |
-| 16-core CPUs | `33-48,97-112` | **`65-80,193-208`** |
+| Single-core CPUs (both hyperthreads of one core) | `1,65` | **`65,193`** |
+| 16-core CPUs | `1-16,65-80` | **`65-80,193-208`** |
 | Management hostname / user | — | `nexus01.csl.illinois.edu` / `iksingh2` |
 | Repo | `/home/iksingh2/io_uring_lat_study` | `/home/iksingh2/io_uring_lat_study` |
 
@@ -50,14 +50,14 @@ Configure each clone from the artifact's `kernel_config` (it's part of the artif
 
 ```sh
 cd ~/linux-latency-5.10-default
-cp kernel_config .config
+cp kernel_config .config; touch .scmversion          # .scmversion: no "+" suffix on the release name (seen on nexus03)
 ./scripts/config --disable CONFIG_IRQ_TIME_ACCOUNTING --set-str CONFIG_LOCALVERSION "-default"
-make olddefconfig && make -s kernelrelease       # 5.10.46-default  (Linux baseline)
+make olddefconfig && make -s kernelrelease       # 5.10.46-default+  (Linux baseline)
 
 cd ~/linux-latency-5.10-latency
-cp kernel_config .config
+cp kernel_config .config; touch .scmversion
 ./scripts/config --enable CONFIG_IRQ_TIME_ACCOUNTING --set-str CONFIG_LOCALVERSION "-latency"
-make olddefconfig && make -s kernelrelease       # 5.10.46-latency  (IRQa / ACCa / PCSched, runtime-selected)
+make olddefconfig && make -s kernelrelease       # 5.10.46-latency+  (IRQa / ACCa / PCSched, runtime-selected)
 ```
 
 `make olddefconfig` needs `flex`, `bison` and `bc` from §2. If they're missing, install them first.
@@ -74,7 +74,7 @@ for t in default latency; do d=~/linux-latency-5.10-$t
   grep CONFIG_IRQ_TIME_ACCOUNTING $d/.config; make -C $d -s kernelrelease; done
 ```
 
-Expected: `linux-5.10`, `SUBLEVEL = 46`, header present, `IRQ_TIME_ACCOUNTING` not set / `=y`, and `5.10.46-default` / `5.10.46-latency`.
+Expected: `linux-5.10`, `SUBLEVEL = 46`, header present, `IRQ_TIME_ACCOUNTING` not set / `=y`, and `5.10.46-default+` / `5.10.46-latency+`. The `+` is added because the tree is a git checkout; the artifact README's names (`5.10.46-linux+`) have it too.
 
 ## 2. Install software dependencies
 
@@ -93,7 +93,7 @@ dpkg-query -W -f '${Package}\t${Version}\n' | sort > ~/.testbed_mode/packages-be
 | `ifconfig` | `net-tools` | Experiment scripts | present |
 | `ethtool` | `ethtool` | Offloads, interrupt coalescing | present |
 | `lstopo` | `hwloc` | CPU topology | present |
-| `gcc`/`g++` 11.4, `make` | `build-essential` | `application/`, `modules/` (paper: gcc 11.4.0, make 4.3) | present (gcc 11.4.0) |
+| `gcc`/`g++` 11.4, `make` | `build-essential` | `application/`, `modules/` (paper: gcc 11.4.0, make 4.3) | present (gcc 11.4.0). `application/` and `modules/` Makefiles pin `gcc-11`/`g++-11`; build the kernels with `CC=gcc-11` too, so both machines match. |
 | Kernel build deps | `flex bison bc rsync libncurses-dev libssl-dev libelf-dev dwarves` | Kernel build | check |
 | `/var/log/kern.log` | `rsyslog` | Kernel-module output is read from this file | check `systemctl is-active rsyslog` |
 | Python `numpy`, `matplotlib` | — | Only if parsing on nexus01 (normally done on nexus03) | present (1.26.4 / 3.5.1) |
@@ -115,7 +115,7 @@ gcc --version | head -1; systemctl is-active rsyslog
 
 ```sh
 dpkg-query -W -f '${Package}\t${Version}\n' | sort > ~/.testbed_mode/packages-after.txt
-comm -13 <(cut -f1 ~/.testbed_mode/packages-before.txt) <(cut -f1 ~/.testbed_mode/packages-after.txt)   # packages to apt remove
+comm -13 <(cut -f1 ~/.testbed_mode/packages-before.txt | sort) <(cut -f1 ~/.testbed_mode/packages-after.txt | sort)   # packages to apt remove
 ```
 
 ## 3. Settings switch script
@@ -126,7 +126,7 @@ comm -13 <(cut -f1 ~/.testbed_mode/packages-before.txt) <(cut -f1 ~/.testbed_mod
 cd ~/io_uring_lat_study
 replication/testbed_mode.sh record-persistent  # once, before installing the kernels (§5)
 replication/testbed_mode.sh status             # current vs. experiment values (read-only)
-replication/testbed_mode.sh save               # record the originals to ~/.testbed_mode/nexus01.state
+replication/testbed_mode.sh save               # (optional; apply does it) record the originals to ~/.testbed_mode/nexus01.state
 replication/testbed_mode.sh apply              # start of a session: apply experiment settings   [APPROVAL]
 replication/testbed_mode.sh revert             # end of a session: restore exactly what was saved [APPROVAL]
 replication/testbed_mode.sh diff-persistent <snapshot>   # persistent changes since the snapshot
@@ -167,12 +167,15 @@ Safeguards:
 | Change | Who | Revert |
 |---|---|---|
 | Packages (§2) | Claude, **[APPROVAL]** | `sudo apt remove` the packages listed by the §2 revert command |
-| Kernels `5.10.46-default`, `5.10.46-latency` (§5) | Claude, no approval needed | Per kernel: `sudo update-initramfs -d -k <ver>; sudo rm -rf /lib/modules/<ver>; sudo rm -f /boot/{vmlinuz,System.map,config,initrd.img}-<ver>; sudo update-grub` |
+| Kernels `5.10.46-default+`, `5.10.46-latency+` (§5) | Claude, no approval needed | Per kernel: `sudo update-initramfs -d -k <ver>; sudo rm -rf /lib/modules/<ver>; sudo rm -f /boot/{vmlinuz,System.map,config,initrd.img}-<ver>; sudo update-grub`. Then point the `/boot/vmlinuz`, `/boot/initrd.img` (and `.old`) symlinks back to their targets in the snapshot's `boot.txt`. Before 2026-10-11 they were `vmlinuz` → `vmlinuz-6.3.0-vanilla` and `initrd.img` → `initrd.img-6.3.0-vanilla`. GRUB doesn't use them here (`GRUB_DEFAULT` names 6.3.0-vanilla explicitly). |
 | Boot entries / options (IOMMU off), `grub-reboot` | **User only** | User's call |
 | Remove an OFED `mlx5_core` DKMS build for 5.10.46 | **User only** | `sudo dkms install <module>/<version> -k <ver>` (from the snapshot's `dkms.txt`) |
 | **Never changed by Claude:** `/etc/default/grub`, `/etc/grub.d/*`, `/etc/modprobe.d/*` (incl. `blacklist-mlx5.conf`), `/etc/netplan/*` | — | `diff-persistent` shows whether anything changed |
 
-**Done when:** `status` runs, a persistent snapshot exists under `~/.testbed_mode/persistent/`, and `~/.testbed_mode/nexus01.state` was written by `save` (`save` only reads system state).
+**Done when:** `status` runs and a persistent snapshot exists under `~/.testbed_mode/persistent/`.
+
+> [!NOTE]
+> Runtime settings reset on reboot, so originals saved under another kernel are useless. **Don't run `save` before the user boots 5.10.46**; `apply` saves automatically on the experiment kernel. The state file records the boot ID: `apply` and `save` archive a state from an earlier boot (`*.stale-<time>`), and `revert` refuses one.
 
 ## 4. Update existing files with this testbed's hardware info
 
@@ -190,12 +193,12 @@ The experiment scripts (`scripts/*.sh`, `experiment/`, `parse/`) run on nexus03 
 
 | File | Change |
 |---|---|
-| `env.sh` (shared by both machines; `target_setup.sh` reads it here) | `HOST=192.168.101.3`, `TARGET=192.168.101.111`, `case $(hostname -s) in nexus01) INTF=ens1np0 ;; *) INTF=ens5008np0 ;; esac`, `TARGET_INTF=ens1np0`, `TARGETC=nexus01.csl.illinois.edu`, `USER=iksingh2`, `TARGETDIR=/home/iksingh2`, `TARGET_REPO=/home/iksingh2/io_uring_lat_study` |
+| `env.sh` (shared by both machines; `target_setup.sh` reads it here) | `HOST=192.168.101.3`, `TARGET=192.168.101.111`, `case $(hostname -s) in nexus01) INTF=ens1np0 ;; *) INTF=ens1006np0 ;; esac`, `TARGET_INTF=ens1np0`, `TARGETC=nexus01.csl.illinois.edu`, `USER=iksingh2`, `TARGETDIR=/home/iksingh2`, `TARGET_REPO=/home/iksingh2/io_uring_lat_study` |
 | `application/latency_server.cc:506` | `cpu_list[32] = {65, 193, 66, 194, 67, 195, 68, 196, 69, 197, 70, 198, 71, 199, 72, 200, 73, 201, 74, 202, 75, 203, 76, 204, 77, 205, 78, 206, 79, 207, 80, 208}` (the single-core configuration uses `cpu_list[0..1]` = `65, 193`) |
 | `modules/softirq_packets.c:42,44`, `modules/packet_dist.c:34,36` | `192.168.1.101` → `192.168.101.3` (client), `192.168.1.102` → `192.168.101.111` (server) |
-| `modules/softirq_packets.c:12-14`, `modules/packet_dist.c:11-13` | nexus01: `FILTER_OUTPUT_CPUS(x) (x == 65 \|\| x == 193)`, `FILTER_PRINT_CPUS(x) (x == 193)`, `COUNTING_SERVER_SIDE` defined. Since the source is shared with nexus03 (33/97, not server side), select the values by hostname in `modules/Makefile` (`ifeq ($(shell hostname -s),nexus01)` → `ccflags-y += -DCOUNTING_SERVER_SIDE …`) and make the macros use those defines. |
+| `modules/softirq_packets.c:12-14`, `modules/packet_dist.c:11-13` | nexus01: `FILTER_OUTPUT_CPUS(x) (x == 65 \|\| x == 193)`, `FILTER_PRINT_CPUS(x) (x == 193)`, `COUNTING_SERVER_SIDE` defined. Since the source is shared with nexus03 (1/65, not server side), select the values by hostname in `modules/Makefile` (`ifeq ($(shell hostname -s),nexus01)` → `ccflags-y += -DCOUNTING_SERVER_SIDE …`) and make the macros use those defines. |
 | `linux-6.12-latency.patch:126` (optional, Fig 16) | `192.168.1.101` → `192.168.101.3` (the patch hardcodes the client IP) |
-| `scripts/multi_cores_helper.sh` | No edit: nexus03 passes it the server CPU list. |
+| `scripts/multi_cores_helper.sh` | Edited on nexus03: its 2nd argument is now the repo path (`$TARGET_REPO`), not `$TARGETDIR`. nexus03 passes it the server CPU list. |
 
 **Done when:**
 
@@ -217,20 +220,21 @@ Prerequisites: §1 clones configured, §2 build deps installed, §4 kernel-sourc
 for t in default latency; do
   cd ~/linux-latency-5.10-$t
   make -j"$(nproc)" bzImage && make -j"$(nproc)" modules || break
-  sudo make modules_install && sudo make install
+  sudo make INSTALL_MOD_STRIP=1 modules_install && sudo make install
 done
 ```
 
 - If the build fails in BTF generation (`pahole` / `CONFIG_DEBUG_INFO_BTF`), run `./scripts/config --disable CONFIG_DEBUG_INFO_BTF && make olddefconfig`, rebuild, and tell the user.
+- `INSTALL_MOD_STRIP=1` strips debug symbols from the *installed* modules only (the artifact's `kernel_config` enables `CONFIG_DEBUG_INFO`). Without it, `/lib/modules` and the initramfs grow by GBs, and `/boot` may not fit them. Kernel behavior is unchanged.
 - `make install` runs `update-grub` and DKMS post-install hooks. Report what they did (checks below).
 
 **Done when:**
 
 ```sh
-ls -l /boot/vmlinuz-5.10.46-default /boot/vmlinuz-5.10.46-latency /lib/modules/ | grep 5.10.46
+ls -l /boot/*5.10.46*; ls /lib/modules | grep 5.10.46; df -h /boot
 grep -E '^GRUB_DEFAULT' /etc/default/grub; sudo grub-editenv list            # default boot entry unchanged vs. snapshot
 grep -c "5.10.46-" /boot/grub/grub.cfg                                        # new entries exist (user picks them)
-for v in 5.10.46-default 5.10.46-latency; do
+for v in $(ls /lib/modules | grep '^5\.10\.46'); do
   modinfo -k $v mlx5_core | grep filename                                     # must be .../kernel/drivers/net/ethernet/mellanox/...
   ls /lib/modules/$v/updates 2>/dev/null                                      # OFED DKMS output would land here
 done

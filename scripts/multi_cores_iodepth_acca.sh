@@ -19,7 +19,8 @@ PERMUTE=$7
 
 DPORT=5001
 CLIENT_TIME=300
-TASKSET="1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,73,75,77,79,81,83,85,87,89,91,93,95,97,99,101,103"
+TASKSET="1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80"
+SERVER_TASKSET="65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208"
 
 # NOTE: This is the number of applications per logical core!
 THREADS_PER_CORE=$((N/32))
@@ -137,7 +138,7 @@ collect_stats_before()
     ssh $USER\@$TARGETC -t "cat /proc/softirqs" \
         > $DIR/softirq_before_server
 
-    ssh $USER\@$TARGETC -t "ifconfig $INTF" \
+    ssh $USER\@$TARGETC -t "ifconfig $TARGET_INTF" \
         > $DIR/ifconfig_before_server
 }
 
@@ -156,7 +157,7 @@ collect_stats_after()
     ssh $USER\@$TARGETC -t "cat /proc/softirqs" \
         > $DIR/softirq_after_server
 
-    ssh $USER\@$TARGETC -t "ifconfig $INTF" \
+    ssh $USER\@$TARGETC -t "ifconfig $TARGET_INTF" \
         > $DIR/ifconfig_after_server
 }
 
@@ -166,7 +167,7 @@ collect_stats_after()
 ###############################################################################
 
 mkdir -p ../temp
-ssh $USER\@$TARGETC -t "mkdir -p $TARGETDIR/latency/temp"
+ssh $USER\@$TARGETC -t "mkdir -p $TARGET_REPO/temp"
 
 echo "$DIR"
 
@@ -221,7 +222,7 @@ if [[ $DIM -eq 0 ]]; then
     echo "[DIM] Disabled"
 
     ssh $USER\@$TARGETC -t \
-        "sudo ethtool -C $INTF adaptive-rx off adaptive-tx off"
+        "sudo ethtool -C $TARGET_INTF adaptive-rx off adaptive-tx off"
 
     sudo ethtool -C $INTF adaptive-rx off adaptive-tx off
 
@@ -230,7 +231,7 @@ elif [[ $DIM -eq 1 ]]; then
     echo "[DIM] Enabled"
 
     ssh $USER\@$TARGETC -t \
-        "sudo ethtool -C $INTF adaptive-rx on adaptive-tx on"
+        "sudo ethtool -C $TARGET_INTF adaptive-rx on adaptive-tx on"
 
     sudo ethtool -C $INTF adaptive-rx on adaptive-tx on
 
@@ -245,9 +246,9 @@ else
     echo "      rx/tx-usecs  = $USECS"
 
     ssh $USER@$TARGETC -t \
-        "sudo ethtool -C $INTF adaptive-rx off adaptive-tx off"
+        "sudo ethtool -C $TARGET_INTF adaptive-rx off adaptive-tx off"
 
-    ssh $USER@$TARGETC -t "sudo ethtool -C $INTF \
+    ssh $USER@$TARGETC -t "sudo ethtool -C $TARGET_INTF \
         rx-frames $FRAMES rx-usecs $USECS \
         tx-frames $FRAMES tx-usecs $USECS"
 
@@ -274,11 +275,11 @@ collect_stats_before
 # Keep the existing SSH mechanism and server launch mechanism unchanged.
 ###############################################################################
 
-echo "[SERVER] Starting pingpong_server_cores on: $TASKSET"
+echo "[SERVER] Starting pingpong_server_cores on: $SERVER_TASKSET"
 
-SERVER_CMD="sudo sh $TARGETDIR/latency/scripts/multi_cores_helper.sh \
-    '$TASKSET' \
-    '$TARGETDIR' \
+SERVER_CMD="sudo sh $TARGET_REPO/scripts/multi_cores_helper.sh \
+    '$SERVER_TASKSET' \
+    '$TARGET_REPO' \
     '$TARGET' \
     '$DPORT' \
     '$N' \
@@ -393,7 +394,7 @@ reset_latency_sysctls_remote
 
 ssh $USER\@$TARGETC -t \
     "sudo cat /sys/kernel/debug/tracing/trace > \
-     $TARGETDIR/latency/temp/latencies-$N-server.log"
+     $TARGET_REPO/temp/latencies-$N-server.log"
 
 ssh $USER\@$TARGETC -t "sudo trace-cmd clear"
 
@@ -414,15 +415,15 @@ ssh $USER\@$TARGETC -t "sudo killall latency_server_cores"
 echo "[LOG] Copying server logs"
 
 scp -r \
-    "$USER@$TARGETC:$TARGETDIR/latency/temp/server_*.log" \
+    "$USER@$TARGETC:$TARGET_REPO/temp/server_*.log" \
     "$DIR"
 
 scp -r \
-    "$USER@$TARGETC:$TARGETDIR/latency/temp/latencies-$N-server.log" \
+    "$USER@$TARGETC:$TARGET_REPO/temp/latencies-$N-server.log" \
     "$DIR"
 
 ssh $USER\@$TARGETC -t \
-    "sudo rm -rf $TARGETDIR/latency/temp/*"
+    "sudo rm -rf $TARGET_REPO/temp/*"
 
 
 ###############################################################################

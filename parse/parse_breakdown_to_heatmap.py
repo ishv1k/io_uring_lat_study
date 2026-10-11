@@ -21,7 +21,7 @@ from collections import defaultdict
 import numpy as np
 
 # Configuration:
-result_dir = "/data/projects/latency"
+result_dir = "/home/iksingh2/io_uring_lat_study/results"
 # Experiments to parse. Leave empty to parse every experiment found in result_dir.
 experiments = ["isolated_thread_default"]
 # Setting prefixes to parse, e.g. "1_64_1_0_1_1_1_". Leave empty to parse every

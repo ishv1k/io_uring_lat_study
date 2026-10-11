@@ -53,7 +53,7 @@ fi
 # Per-role values (see replication/nexus0{1,3}_*.md).
 case $ROLE in
 server) IF=ens1np0;    IP=192.168.101.111; CPUS="65 193" ;;
-client) IF=ens5008np0; IP=192.168.101.3;   CPUS="33 97" ;;
+client) IF=ens1006np0; IP=192.168.101.3;   CPUS="1 65" ;;
 *) echo "Bad role: $ROLE" >&2; exit 1 ;;
 esac
 PREFIX=24
@@ -66,13 +66,15 @@ STATE=$STATE_DIR/$HOSTNAME_S.state
 PHC_PID=$STATE_DIR/$HOSTNAME_S.phc2sys.pid
 TRACING=/sys/kernel/debug/tracing
 SMT_CONTROL=/sys/devices/system/cpu/smt/control
+BOOT_ID=/proc/sys/kernel/random/boot_id
 
 FAILS=0
 warn() { echo "WARN: $*" >&2; FAILS=$((FAILS + 1)); }
 rd() { sudo cat "$1" 2>/dev/null; }
 wr() { echo "$2" | sudo tee "$1" >/dev/null 2>&1 || warn "could not write '$2' to $1"; }
 have_if() { [[ -e /sys/class/net/$IF ]]; }
-mlx5_loaded() { lsmod | grep -q '^mlx5_core '; }
+# Not "grep -q": with pipefail, lsmod dies of SIGPIPE when grep exits early, and the check fails.
+mlx5_loaded() { lsmod | grep '^mlx5_core ' >/dev/null; }
 
 # State file: one "type<TAB>key<TAB>value" line per setting.
 #   file  <path>  <value>   restored by writing <value> back to <path>
@@ -85,6 +87,16 @@ put_file() {
 	put file "$1" "$v"
 }
 get() { awk -F'\t' -v t="$1" -v k="$2" '$1 == t && $2 == k { print $3; exit }' "$STATE"; }
+
+# Runtime settings reset on reboot, so a state saved during an earlier boot is stale.
+state_is_stale() { [[ -e $STATE && $(get info boot_id) != "$(cat $BOOT_ID)" ]]; }
+archive_stale() {
+	local dst
+	dst=$STATE.stale-$(date +%Y%m%d-%H%M%S)
+	mv "$STATE" "$dst"
+	rm -f "$PHC_PID"
+	echo "Saved state was from an earlier boot (the reboot already reset it); archived at $dst"
+}
 
 irq_list() { ls "/sys/class/net/$IF/device/msi_irqs" 2>/dev/null; }
 
@@ -103,6 +115,7 @@ declare -A FEATURE=([ntuple]=ntuple-filters [gro]=generic-receive-offload \
 	[gso]=generic-segmentation-offload [tso]=tcp-segmentation-offload [lro]=large-receive-offload)
 
 save_system() {
+	put info boot_id "$(cat $BOOT_ID)"
 	put info kernel "$(uname -r)"
 	put info date "$(date -Is)"
 	put info role "$ROLE"
@@ -150,6 +163,7 @@ save_netdev() {
 }
 
 cmd_save() {
+	state_is_stale && archive_stale
 	if [[ -e $STATE && $FORCE -eq 0 ]]; then
 		echo "Already saved: $STATE (revert first, or --force to overwrite)" >&2
 		exit 1
@@ -170,6 +184,7 @@ cmd_apply() {
 		echo "Running $kver, not an experiment kernel. Refusing (use --force-kernel)." >&2
 		exit 1
 	fi
+	state_is_stale && archive_stale
 	[[ -e $STATE ]] || cmd_save
 
 	if ! mlx5_loaded; then
@@ -195,7 +210,8 @@ cmd_apply() {
 	local f
 	for f in /sys/devices/system/cpu/cpu[0-9]*/cpuidle/state[123]/disable; do wr "$f" 1; done
 	sudo ip link set "$IF" mtu $MTU up || warn "mtu"
-	if ! ip -4 -o addr show "$IF" | grep -q " $IP/"; then
+	# Not "grep -q" on a pipe (pipefail, see mlx5_loaded).
+	if [[ " $(ip -4 -o addr show "$IF" | awk '{print $4}' | xargs) " != *" $IP/"* ]]; then
 		sudo ip addr add "$IP/$PREFIX" dev "$IF" && printf 'kv\tadded_ip\t1\n' >> "$STATE"
 	fi
 	sudo systemctl stop irqbalance
@@ -220,6 +236,11 @@ cmd_apply() {
 
 cmd_revert() {
 	[[ -e $STATE ]] || { echo "Nothing saved at $STATE" >&2; exit 1; }
+	if state_is_stale; then
+		archive_stale
+		echo "Nothing to revert in this boot." >&2
+		exit 1
+	fi
 	echo "Reverting $HOSTNAME_S to the settings saved on $(get info date)"
 
 	if [[ -s $PHC_PID ]]; then
@@ -273,7 +294,11 @@ cmd_revert() {
 
 cmd_status() {
 	echo "host=$HOSTNAME_S role=$ROLE kernel=$(uname -r) if=$IF ip=$IP cpus=$CPUS"
-	if [[ -e $STATE ]]; then echo "saved: $STATE ($(get info date))"; else echo "saved: none"; fi
+	if [[ -e $STATE ]]; then
+		echo "saved: $STATE ($(get info date), kernel $(get info kernel)$(state_is_stale && echo ', STALE: earlier boot'))"
+	else
+		echo "saved: none"
+	fi
 	printf '%-28s %-28s %s\n' setting current experiment
 	row() { printf '%-28s %-28s %s\n' "$1" "${2:-n/a}" "$3"; }
 	row "SMT (hyperthreading)" "$(cat $SMT_CONTROL 2>/dev/null)" on
@@ -290,7 +315,7 @@ cmd_status() {
 	done
 	row rps_sock_flow_entries "$(cat /proc/sys/net/core/rps_sock_flow_entries)" $FLOW_ENTRIES
 	row wmem_max/rmem_max "$(sysctl -n net.core.wmem_max)/$(sysctl -n net.core.rmem_max)" "$SOCK_BUF/$SOCK_BUF"
-	row ftrace buffer_size_kb "$(trace_kb)" $TRACE_KB
+	row "ftrace buffer_size_kb" "$(trace_kb)" $TRACE_KB
 	row nmi_watchdog "$(cat /proc/sys/kernel/nmi_watchdog)" "1 (0 with --pmu)"
 	row phc2sys "$(pgrep -f "phc2sys .*-c $IF" >/dev/null && echo running || echo stopped)" running
 	if have_if; then
@@ -327,7 +352,8 @@ collect_persistent() {
 	sudo chown -R "$(id -u):$(id -g)" "$d"
 	# shellcheck disable=SC2024  # snapshot files are user-owned
 	sudo grub-editenv list > "$d/grubenv.txt" 2>&1
-	ls -1 /boot > "$d/boot.txt"
+	# Names plus symlink targets: kernel installs repoint /boot/vmlinuz and /boot/initrd.img(.old).
+	find /boot -maxdepth 1 -mindepth 1 -printf '%f %l\n' | sort > "$d/boot.txt"
 	ls -1 /lib/modules > "$d/lib_modules.txt"
 	dkms status > "$d/dkms.txt" 2>&1
 	dpkg-query -W -f '${Package}\t${Version}\n' | sort > "$d/packages.txt"

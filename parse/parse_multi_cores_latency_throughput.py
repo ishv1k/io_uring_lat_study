@@ -10,7 +10,7 @@ Directory layout it expects (see experiment/run_fig12_acca.py):
 
     <result_dir>/<experiment>/<p0>_<p1>_..._<pn>_<run>/
 
-e.g. /data/projects/latency/multi_cores_macro_acca/4_64_1_0_1_1_16_0
+e.g. /home/iksingh2/io_uring_lat_study/results/multi_cores_macro_acca/4_64_1_0_1_1_16_0
 where the setting is "4_64_1_0_1_1_16" and the run index is "0".
 
 Unlike the single-core experiments, a multi-core run is driven by one client
@@ -41,7 +41,7 @@ from collections import defaultdict
 import numpy as np
 
 # Configuration:
-result_dir = "/data/projects/latency"
+result_dir = "/home/iksingh2/io_uring_lat_study/results"
 # Experiments to parse. Leave empty to parse every experiment found in result_dir.
 experiments = ["multi_cores_macro_acca"]
 

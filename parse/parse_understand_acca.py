@@ -267,7 +267,7 @@ def report(threads_info):
 
 
 if __name__ == "__main__":
-    result_dir = "/data/projects/latency/"
+    result_dir = "/home/iksingh2/io_uring_lat_study/results/"
     experiment = "single_core_understand_acca/36_64_1_1_1_1_1_2"
     n_thread = 36
 

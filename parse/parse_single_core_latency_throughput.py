@@ -10,7 +10,7 @@ Directory layout it expects (see experiment/run_fig2_default.py):
 
     <result_dir>/<experiment>/<p0>_<p1>_..._<pn>_<run>/
 
-e.g. /data/projects/latency/isolated_thread_default/1_64_1_0_1_1_1_0
+e.g. /home/iksingh2/io_uring_lat_study/results/isolated_thread_default/1_64_1_0_1_1_1_0
 where the setting is "1_64_1_0_1_1_1" and the run index is "0".
 
 Per setting it reports the merged latency distribution, the average throughput
@@ -25,7 +25,7 @@ from collections import defaultdict
 import numpy as np
 
 # Configuration:
-result_dir = "/data/projects/latency"
+result_dir = "/home/iksingh2/io_uring_lat_study/results"
 # Experiments to parse. Leave empty to parse every experiment found in result_dir.
 experiments = ["single_core_macro_default"]
 

@@ -19,7 +19,8 @@ PERMUTE=$7
 
 DPORT=5001
 CLIENT_TIME=300
-TASKSET="1,73"
+TASKSET="1,65"
+SERVER_TASKSET="65,193"
 
 source ../env.sh
 
@@ -129,7 +130,7 @@ enable_modules_local()
 
 enable_modules_remote()
 {
-    ssh $USER\@$TARGETC -t "sudo insmod $TARGETDIR/latency/modules/packet_dist.ko"
+    ssh $USER\@$TARGETC -t "sudo insmod $TARGET_REPO/modules/packet_dist.ko"
     ssh $USER\@$TARGETC -t "echo 1 | sudo tee /sys/module/packet_dist/parameters/enable_filter"
 }
 
@@ -160,7 +161,7 @@ collect_stats_before()
     ssh $USER\@$TARGETC -t "cat /proc/softirqs" \
         > $DIR/softirq_before_server
 
-    ssh $USER\@$TARGETC -t "ifconfig $INTF" \
+    ssh $USER\@$TARGETC -t "ifconfig $TARGET_INTF" \
         > $DIR/ifconfig_before_server
 }
 
@@ -179,7 +180,7 @@ collect_stats_after()
     ssh $USER\@$TARGETC -t "cat /proc/softirqs" \
         > $DIR/softirq_after_server
 
-    ssh $USER\@$TARGETC -t "ifconfig $INTF" \
+    ssh $USER\@$TARGETC -t "ifconfig $TARGET_INTF" \
         > $DIR/ifconfig_after_server
 }
 
@@ -189,7 +190,7 @@ collect_stats_after()
 ###############################################################################
 
 mkdir -p ../temp
-ssh $USER\@$TARGETC -t "mkdir -p $TARGETDIR/latency/temp"
+ssh $USER\@$TARGETC -t "mkdir -p $TARGET_REPO/temp"
 
 echo "$DIR"
 
@@ -244,7 +245,7 @@ if [[ $DIM -eq 0 ]]; then
     echo "[DIM] Disabled"
 
     ssh $USER\@$TARGETC -t \
-        "sudo ethtool -C $INTF adaptive-rx off adaptive-tx off"
+        "sudo ethtool -C $TARGET_INTF adaptive-rx off adaptive-tx off"
 
     sudo ethtool -C $INTF adaptive-rx off adaptive-tx off
 
@@ -253,7 +254,7 @@ elif [[ $DIM -eq 1 ]]; then
     echo "[DIM] Enabled"
 
     ssh $USER\@$TARGETC -t \
-        "sudo ethtool -C $INTF adaptive-rx on adaptive-tx on"
+        "sudo ethtool -C $TARGET_INTF adaptive-rx on adaptive-tx on"
 
     sudo ethtool -C $INTF adaptive-rx on adaptive-tx on
 
@@ -268,9 +269,9 @@ else
     echo "      rx/tx-usecs  = $USECS"
 
     ssh $USER@$TARGETC -t \
-        "sudo ethtool -C $INTF adaptive-rx off adaptive-tx off"
+        "sudo ethtool -C $TARGET_INTF adaptive-rx off adaptive-tx off"
 
-    ssh $USER@$TARGETC -t "sudo ethtool -C $INTF \
+    ssh $USER@$TARGETC -t "sudo ethtool -C $TARGET_INTF \
         rx-frames $FRAMES rx-usecs $USECS \
         tx-frames $FRAMES tx-usecs $USECS"
 
@@ -309,21 +310,21 @@ echo "[SERVER] Starting latency_server"
 ssh "$USER@$TARGETC" -t "
   sudo sh -c '
     ulimit -n 65536
-    exec taskset -c $TASKSET nice -n -20 \
-      $TARGETDIR/latency/application/latency_server \
+    exec taskset -c $SERVER_TASKSET nice -n -20 \
+      $TARGET_REPO/application/latency_server \
       --ip $TARGET --port $DPORT --count $N --iodepth $IODEPTH --flowsize $SIZE \
       --pin $PIN --permute $PERMUTE --sc 1
-  ' > $TARGETDIR/latency/temp/server.log 2>&1
+  ' > $TARGET_REPO/temp/server.log 2>&1
 " &
 
 
 echo "sudo sh -c '
   ulimit -n 65536
-  exec taskset -c $TASKSET nice -n -20 \
-    $TARGETDIR/latency/application/latency_server \
+  exec taskset -c $SERVER_TASKSET nice -n -20 \
+    $TARGET_REPO/application/latency_server \
     --ip $TARGET --port $DPORT --count $N --iodepth $IODEPTH --flowsize $SIZE \
     --pin $PIN --permute $PERMUTE --sc 1
-  ' > $TARGETDIR/latency/temp/server.log 2>&1"
+  ' > $TARGET_REPO/temp/server.log 2>&1"
 
 
 ###############################################################################
@@ -445,7 +446,7 @@ reset_latency_sysctls_remote
 
 ssh $USER\@$TARGETC -t \
     "sudo cat /sys/kernel/debug/tracing/trace > \
-     $TARGETDIR/latency/temp/latencies-$N-server.log"
+     $TARGET_REPO/temp/latencies-$N-server.log"
 
 ssh $USER\@$TARGETC -t "sudo trace-cmd clear"
 
@@ -466,15 +467,15 @@ ssh $USER\@$TARGETC -t "sudo killall latency_server"
 echo "[LOG] Copying server logs"
 
 scp -r \
-    $USER\@$TARGETC:$TARGETDIR/latency/temp/server.log \
+    $USER\@$TARGETC:$TARGET_REPO/temp/server.log \
     $DIR
 
 scp -r \
-    $USER\@$TARGETC:$TARGETDIR/latency/temp/latencies-$N-server.log \
+    $USER\@$TARGETC:$TARGET_REPO/temp/latencies-$N-server.log \
     $DIR
 
 ssh $USER\@$TARGETC -t \
-    "sudo rm -rf $TARGETDIR/latency/temp/*"
+    "sudo rm -rf $TARGET_REPO/temp/*"
 
 
 ###############################################################################

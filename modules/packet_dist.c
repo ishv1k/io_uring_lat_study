@@ -8,9 +8,9 @@
 #include <linux/ktime.h>
 
 #define SEGMENT_HISTO_SIZE 96 // should be 64, but we leave some margin
-#define FILTER_OUTPUT_CPUS(x) (x == 1 || x == 73)
-#define FILTER_PRINT_CPUS(x) (x == 73)
-// #define COUNTING_SERVER_SIDE
+// CPUs come from modules/Makefile (per host); COUNTING_SERVER_SIDE is defined there on the server.
+#define FILTER_OUTPUT_CPUS(x) (x == FILTER_CPU_A || x == FILTER_CPU_B)
+#define FILTER_PRINT_CPUS(x) (x == FILTER_CPU_B)
 
 static int enable_filter __read_mostly = 0;
 
@@ -31,9 +31,9 @@ unsigned int skb_segments_counter(void *priv, struct sk_buff *skb, const struct 
 
     if (enable_filter > 0) {
 #ifdef COUNTING_SERVER_SIDE
-        if(iph->saddr == in_aton("192.168.1.101") && iph->daddr == in_aton("192.168.1.102")) {
+        if(iph->saddr == in_aton("192.168.101.3") && iph->daddr == in_aton("192.168.101.111")) {
 #else
-        if(iph->saddr == in_aton("192.168.1.102") && iph->daddr == in_aton("192.168.1.101")) {
+        if(iph->saddr == in_aton("192.168.101.111") && iph->daddr == in_aton("192.168.101.3")) {
 #endif
             cur_time = ktime_get_ns();
 

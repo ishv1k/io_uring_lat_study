@@ -228,7 +228,7 @@ def report(threads_per_side):
 
 
 if __name__ == "__main__":
-    result_dir = "/data/projects/latency/"
+    result_dir = "/home/iksingh2/io_uring_lat_study/results/"
     experiment = "single_core_rdpmc_acca/36_64_1_1_1_1_1_0"
     n_thread = 36
 
